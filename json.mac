@@ -1,0 +1,199 @@
+/* ====================================================== */
+maxima_json_debug_msg(s) := block([],
+    /*warning(s),*/
+    false)$
+
+to_json(data, [u]) := block([json_str : false, pretty : false, depth : 0, depth_next : 1, indent : "", indent_next : "", newline : ""],
+    if is(length(u) = 1) then pretty : u[1],
+    if is(length(u) = 2) then (pretty : u[1], depth : u[2], depth_next : depth + 1),
+    if pretty then (indent : smake(depth*4, " "), indent_next : smake(depth_next*4, " "), newline : printf(false, "~%")),
+    maxima_json_debug_msg(printf(false, "[~a] to_json ~a", depth, data)),
+    /*    */
+    if ((not(atom(data))) and (is(equal(op(data),"=")))) then block([a, l_str, r_str],
+        a : args(data),
+        maxima_json_debug_msg(printf(false, "  association ~a", a)),
+        l_str : to_json(a[1], pretty, depth_next),
+        r_str : to_json(a[2], pretty, depth_next),
+        json_str : printf(false, "~a\{~a : ~a\}", indent, l_str, r_str)),
+    if (json_str # false) then go(tag_exit),
+    /*    */
+    if (listp(data)) then block([comma],
+        maxima_json_debug_msg(printf(false, "  list")),
+        if ((not(atom(data[1]))) and (is(equal(op(data[1]),"=")))) 
+        then block([cnt : 0, comma : ","],
+            json_str : printf(false, "~a\{~a", indent, newline),
+            for v in data do block([a, l_str, r_str],
+                a : args(v),
+                l_str : to_json(a[1], pretty, depth_next),
+                r_str : to_json(a[2], pretty, depth_next),
+                cnt : cnt + 1,
+                if is(cnt = length(data)) then (comma : ""),
+                json_str : printf(false, "~a~a~a : ~a~a~a", json_str, indent, l_str, r_str, comma, newline)),
+            json_str : printf(false, "~a~a\}", json_str, indent))
+        else block([cnt : 0, comma : ","],
+            json_str : printf(false, "~a[~a", indent, newline),
+            for v in data do block([v_str],
+                v_str : to_json(v, pretty, depth_next),
+                cnt : cnt + 1,
+                if is(cnt = length(data)) then (comma : ""),
+                json_str : printf(false, "~a~a~a~a~a", json_str, indent, v_str, comma, newline)),
+            json_str : printf(false, "~a~a]", json_str, indent))),
+    if (setp(data)) then block([cnt : 0, comma : ","],
+        maxima_json_debug_msg(printf(false, "  set ~a", data)),
+        json_str : printf(false, "~a\{~a", indent, newline),
+        for v in data do block([a, l_str, r_str],
+            a : args(v),
+            l_str : to_json(a[1], pretty, depth_next),
+            r_str : to_json(a[2], pretty, depth_next),
+            cnt : cnt + 1,
+            if is(cnt = length(data)) then (comma : ""),
+            json_str : printf(false, "~a~a~a : ~a~a~a", json_str, indent_next, l_str, r_str, comma, newline)),
+        json_str : printf(false, "~a~a\}", json_str, indent)),
+    if (json_str # false) then go(tag_exit),
+    /*    */
+    if stringp(data) then block([],
+        json_str : printf(false, "~s", data)),
+    if (json_str # false) then go(tag_exit),
+    /*    */
+    if atom(data) then block([],
+        json_str : printf(false, "~a", data)),
+    if (json_str # false) then go(tag_exit),
+    /*    */
+    json_str : printf(false, "~a", data),
+    tag_exit,
+	json_str)$
+
+from_json(json_str) := block([data : []],
+    chrs : charlist(json_str),
+    if (length(chrs) = 0) then error("ERROR STRING EMPTY"),
+    chrs : from_json_whitespace(chrs),
+    data : from_json_chrs(chrs, 0),
+	data)$
+
+from_json_print_chrs(chrs) := block([s : ""],
+    for c in chrs do s : sconcat(s, c),
+    s)$
+
+from_json_chrs(chrs, depth) := block([data],
+    maxima_json_debug_msg(printf(false, "[~a] from_json_chrs ~a", depth, from_json_print_chrs(chrs))),
+    if (length(chrs) = 0) then error("ERROR STRING EMPTY"),
+    chrs : from_json_whitespace(chrs),
+    [chrs, data] : from_json_value(chrs, depth+1),
+    tag_exit,
+	data)$
+
+from_json_value(chrs, depth) := block([data : false],
+    maxima_json_debug_msg(printf(false, "[~a] from_json_value ~a", depth, from_json_print_chrs(chrs))),
+    chrs : from_json_whitespace(chrs),
+    if (sequal(chrs[1], "\"")) 
+        then ([chrs, data] : from_json_string(chrs, depth+1), go(tag_exit)),
+    if (sequal(chrs[1], "\{")) 
+        then ([chrs, data] : from_json_object(chrs, depth+1), go(tag_exit)),
+    if (sequal(chrs[1], "\[")) 
+        then ([chrs, data] : from_json_array(chrs, depth+1), go(tag_exit)),
+    if ((length(chrs) >= 4) and sequal(chrs[1], "t") and sequal(chrs[2], "r") and sequal(chrs[3], "u") and sequal(chrs[4], "e")) 
+        then (chrs : rest(chrs, 4), data : true, go(tag_exit)),
+    if ((length(chrs) >= 5) and sequal(chrs[1], "f") and sequal(chrs[2], "a") and sequal(chrs[3], "l") and sequal(chrs[4], "s") and sequal(chrs[5], "e")) 
+        then (chrs : rest(chrs, 5), data : false, go(tag_exit)),
+    if ((length(chrs) >= 4) and sequal(chrs[1], "n") and sequal(chrs[2], "u") and sequal(chrs[3], "l") and sequal(chrs[4], "l")) 
+        then (chrs : rest(chrs, 4), data : false, go(tag_exit)),
+    if ((length(chrs) >= 1) and (sequal(chrs[1], "-") or ((cint(chrs[1]) >= cint("0")) and (cint(chrs[1]) <= cint("9"))))) 
+        then ([chrs, data] : from_json_number(chrs, depth+1), go(tag_exit)),
+    tag_exit,
+    [chrs, data])$
+
+from_json_object(chrs, depth) := block([data : {}, c : "", s : "", v : false],
+    maxima_json_debug_msg(printf(false, "[~a] from_json_object ~a", depth, from_json_print_chrs(chrs))),
+    if (length(chrs) = 0) 
+        then error("ERROR OBJECT LENGTH"),
+    c : chrs[1],
+    if (not(sequal(c, "\{"))) 
+        then error("ERROR OBJECT BEGIN"),
+    pop(chrs),
+    if (length(chrs) = 0) 
+        then error("ERROR OBJECT END"),
+    tag_next,
+    chrs : from_json_whitespace(chrs),
+    if (sequal(chrs[1], ",")) then
+        (pop(chrs), chrs : from_json_whitespace(chrs)),
+    if (sequal(chrs[1], "\}"))  then
+        (pop(chrs), (go(tag_exit))),
+    [chrs, s] : from_json_string(chrs, depth+1),
+    chrs : from_json_whitespace(chrs),
+    c : pop(chrs),
+    if (not(sequal(c, ":"))) 
+        then error("ERROR OBJECT PAIR"),
+    [chrs, v] : from_json_value(chrs, depth+1),
+    data : adjoin(s = v, data),
+    go(tag_next),
+    tag_exit,
+    [chrs, data])$
+
+from_json_array(chrs, depth) := block([data : [], c : "", v : false],
+    maxima_json_debug_msg(printf(false, "[~a] from_json_array ~a", depth, from_json_print_chrs(chrs))),
+    if (length(chrs) = 0) then error("ERROR ARRAY LENGTH"),
+    if (not(sequal(chrs[1], "\["))) then error("ERROR ARRAY BEGIN"),
+    pop(chrs),
+    if (length(chrs) = 0) then error("ERROR ARRAY END"),
+    tag_next,
+    chrs : from_json_whitespace(chrs),
+    if (sequal(chrs[1], ",")) then
+        (pop(chrs), chrs : from_json_whitespace(chrs)),
+    if (sequal(chrs[1], "\]")) 
+        then (pop(chrs), go(tag_exit)),
+    chrs : from_json_whitespace(chrs),
+    [chrs, v] : from_json_value(chrs, depth+1),
+    data : append(data,[v]),
+    go(tag_next),
+    tag_exit,
+    [chrs, data])$
+
+from_json_string(chrs, depth) := block([s : ""],
+    maxima_json_debug_msg(printf(false, "[~a] from_json_string ~a", depth, from_json_print_chrs(chrs))),
+    if (length(chrs) = 0) then error("ERROR STRING LENGTH"),
+    c : chrs[1],
+    if (not(sequal(c, "\""))) then error("ERROR STRING BEGIN"),
+    pop(chrs),
+    if (length(chrs) = 0) then error("ERROR STRING END"),
+    tag_next,
+    c : pop(chrs),
+    if (sequal(c, "\\")) then (
+        c : pop(chrs),
+        if      (sequal(c, "\"")) then c : "\""
+        else if (sequal(c, "\\")) then c : "\\"
+        else if (sequal(c, "/")) then c : "/"
+        else if (sequal(c, "n")) then c : printf(false, "~%")
+        else if (sequal(c, "t")) then c : printf(false, "~t")
+    ),
+    if (sequal(c, "\"")) 
+        then (go(tag_exit))
+        else (s : sconcat(s, c), go(tag_next)),
+    tag_exit,
+    [chrs, s])$
+
+from_json_number(chrs, depth) := block([n : 0, sgn : 1],
+    maxima_json_debug_msg(printf(false, "[~a] from_json_number ~a", depth, from_json_print_chrs(chrs))),
+    if (length(chrs) = 0) then error("ERROR NUMBER LENGTH"),
+    chrs : from_json_whitespace(chrs),
+    if (sequal(chrs[1], "-"))
+        then (sgn : -1, pop(chrs)),
+    if (length(chrs) = 0) then error("ERROR NUMBER DIGITS"),
+    tag_next,
+    if (length(chrs) = 0)
+        then (go(tag_exit)),
+    if (not ((cint(chrs[1]) >= cint("0")) and (cint(chrs[1]) <= cint("9")))) 
+        then (go(tag_exit)),
+    c : pop(chrs),
+    n : n*10 + cint(c) - cint("0"),
+    go(tag_next),
+    tag_exit,
+    [chrs, n*sgn])$
+
+from_json_whitespace(chrs) := block([],
+    next_char,
+    if is(length(chrs) > 0) then (
+        c : chrs[1],
+        if (sequal(c, " ")) then (pop(chrs), go(next_char)),
+        if (sequal(c, printf(false, "~%"))) then (pop(chrs), go(next_char))
+    ),
+    chrs)$

@@ -1,0 +1,8 @@
+/* ====================================================== */
+load("json.mac")$
+data : ["var", 1, ["foo", 2], "bar" = 8, {"a" = 1, "b" = 2, "c" = "3"}]$
+json_str : to_json(data, true)$
+data_r : from_json(json_str)$
+printf(true, ">>>data=~%~a", data)$
+printf(true, ">>>json=~%~a", json_str)$
+printf(true, ">>>data=~%~a", data_r)$
